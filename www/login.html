@@ -1,0 +1,40 @@
+<h2>login</h2>
+<form action="authorize" method="post" id="login_form">
+	<table>
+		<tr>
+			<td><label for="form_username">username:</label></td>
+			<td><input type="text" size="16" name="username" id="form_username"/></td>
+		</tr>
+
+		<tr>
+			<td><label for="form_password">password:</label></td>
+			<td><input type="password" size="16" name="password" id="form_password"/></td>
+		</tr>
+
+		<tr>
+			<td></td>
+			<td><input type="submit" value="log in"/>
+		</tr>
+	</table>
+
+	<input type="hidden" name="client_id" class="prepopulate"/>
+	<input type="hidden" name="redirect_uri" class="prepopulate"/>
+	<input type="hidden" name="prompt" class="prepopulate"/>
+	<input type="hidden" name="nonce" class="prepopulate"/>
+	<input type="hidden" name="state" class="prepopulate"/>
+	<input type="hidden" name="response_type" class="prepopulate"/>
+	<input type="hidden" name="response_mode" class="prepopulate"/>
+	<input type="hidden" name="form_key" class="prepopulate"/>
+	<input type="hidden" name="max_age" class="prepopulate"/>
+</form>
+
+<script language="javascript">
+; (function() {
+	var params = new URLSearchParams(document.location.hash.substring(1));
+	var elements = login_form.getElementsByClassName("prepopulate");
+	for(var i = 0; i < elements.length; i++) {
+		var element = elements[i];
+		element.value = params.get(element.name);
+	}
+})();
+</script>

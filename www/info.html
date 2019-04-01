@@ -1,0 +1,88 @@
+<h2>id token info</h2>
+<table cellpadding="6">
+	<tr>
+		<td>webid</td>
+		<td><a id="link_webid"><code id="span_webid"></code></a></td>
+	</tr>
+
+	<tr>
+		<td>authenticated</td>
+		<td><code id="span_authenticated"></code></td>
+	</tr>
+
+	<tr>
+		<td>issued</td>
+		<td><code id="span_issued"></code></td>
+	</tr>
+
+	<tr>
+		<td>expires</td>
+		<td><code id="span_expires"></code></td>
+	</tr>
+
+	<tr>
+		<td>claims</td>
+		<td><pre id="span_claims"></pre></td>
+	</tr>
+
+	<tr>
+		<td>id token</td>
+		<td><code id="span_id_token" style="word-break: break-all; word-wrap: break-word;"></code></td>
+	</tr>
+</table>
+<ul>
+	<li><a href="logout">log out this session</a></li>
+	<li><a href="logout-all">log out all sessions</a></li>
+</ul>
+
+<script src="base64.js"></script>
+<script language="javascript">
+; (function() {
+
+async function authorize() {
+	console.log("in authorize()");
+	var myUri = (new URL(document.location.pathname, document.location.href)).href;
+	var registration = await fetch("register", {
+		method: "POST",
+		headers: new Headers({"Content-type": "application/json"}),
+		credentials: "include",
+		body: JSON.stringify( {
+			response_types: [ "id_token" ],
+			redirect_uris: [ myUri ]
+		} )
+	});
+	console.log("registration", registration);
+	if(registration.ok && (201 == registration.status)) {
+		var responseJson = await registration.json();
+		var authorizeUrl = new URL("authorize", myUri);
+		authorizeUrl.searchParams.append("client_id", responseJson.client_id);
+		authorizeUrl.searchParams.append("redirect_uri", myUri);
+		authorizeUrl.searchParams.append("response_type", "id_token");
+		document.location = authorizeUrl.href;
+	}
+}
+
+var params = new URLSearchParams(document.location.hash.substring(1));
+var id_token = params.get("id_token");
+
+document.location.hash = "";
+
+if(!id_token) {
+	authorize();
+} else {
+	var parts = id_token.split(".");
+
+	var body = Base64URL.decodeUTF8String(parts[1]);
+	var bodyObj = JSON.parse(body);
+
+	span_webid.innerText = bodyObj.webid;
+	link_webid.href = bodyObj.webid;
+	span_authenticated.innerText = (new Date(bodyObj.auth_time * 1000)).toString();
+	span_issued.innerText = (new Date(bodyObj.iat * 1000)).toString();
+	span_expires.innerText = (new Date(bodyObj.exp * 1000)).toString();
+	span_claims.innerText = JSON.stringify(bodyObj, null, 4);
+	span_id_token.innerText = id_token;
+}
+
+})();
+</script>
