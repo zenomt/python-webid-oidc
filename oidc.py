@@ -224,8 +224,6 @@ def check_consent(user_id, session_id, redirect_uri):
 	return c.fetchone()
 
 class OIDCRequestHandler(BaseHTTPRequestHandler):
-	server_version = 'SimpleOIDCService/0.1'
-
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
 	TOKEN      = 'token'
@@ -233,8 +231,6 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	REGISTER   = 'register'
 	LOGOUT     = 'logout'
 	LOGOUT_ALL = 'logout-all'
-
-	CHECK_SESSION = "session.html"
 
 	COOKIE     = 'oidc_session'
 
@@ -303,8 +299,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"subject_types_supported": ["public"],
 			"id_token_signing_alg_values_supported": [ "RS256" ],
 			"scopes_supported": [ "openid", "webid" ],
-			"grant_types_supported": [ "authorization_code", "implicit" ],
-#			"check_session_iframe": args.url + self.CHECK_SESSION
+			"grant_types_supported": [ "authorization_code", "implicit" ]
 		})
 
 	def answer_jwks(self):
@@ -594,8 +589,6 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		path = urlParts.path
 		if path.startswith(urlPathPrefix):
 			path = path[len(urlPathPrefix):]
-		print "stripped path", path
-		print "headers", self.headers
 
 		other_headers = []
 		m = methods.get(path, None)
