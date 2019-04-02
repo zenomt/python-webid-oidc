@@ -139,8 +139,8 @@ To disable `baduser`:
 
 With no parameters specifying creating or modifying a user, `wopasswd.py`
 will display a summary of configured users, whether each user is disabled,
-and the number of active sessions and tokens, and number of unredeemed
-authorization codes:
+the number of active sessions and tokens, and number of unredeemed authorization
+codes:
 
 	$ python wopasswd.py
 	username    webid                                     email                 s t c
@@ -238,6 +238,9 @@ Future Work
 -----------
   - An interface for users to revoke consent for a URI
   - Better logging
+  - Session and token inspection
+    - Display the user's IP address, user agent, login time, etc
+    - Display tokens' redirect URI, issue time, etc
   - Refresh tokens
 
 

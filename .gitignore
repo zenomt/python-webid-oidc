@@ -1,0 +1,4 @@
+data/*.pem
+data/storage.sqlite
+*.pyc
+*.pyo
