@@ -360,7 +360,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		response_types = body.get('response_types', ['code'])
 		redirect_uris = body['redirect_uris']
 		if not check_redirect_uris(redirect_uris, args.insecure_mode):
-			return self.answer_json({ "error": "invaild_redirect_uri" }, code=400, cors=True)
+			return self.answer_json({ "error": "invalid_redirect_uri" }, code=400, cors=True)
 		client_id = make_client_id(response_types, redirect_uris)
 		client_secret = make_client_secret(client_id)
 		expires_on = now + CLIENT_LIFETIME
