@@ -301,7 +301,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	def answer_json(self, obj, content_type='application/json', **kv):
 		return self.send_answer(json.dumps(obj, indent=4), content_type=content_type, **kv)
 
-	def answer_openid_config(self, **kv):
+	def answer_openid_config(self):
 		return self.answer_json({
 			"issuer": args.url,
 			"authorization_endpoint": args.url + self.AUTHORIZE,
@@ -314,9 +314,9 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"id_token_signing_alg_values_supported": [ "RS256" ],
 			"scopes_supported": [ "openid", "webid" ],
 			"grant_types_supported": [ "authorization_code", "implicit" ]
-		}, cors=True, **kv)
+		}, cors=True)
 
-	def answer_jwks(self, **kv):
+	def answer_jwks(self):
 		return self.answer_json({
 			"keys": [
 				{
@@ -328,7 +328,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 					"key_ops": [ "verify" ]
 				}
 			]
-		}, cors=True, **kv)
+		}, cors=True)
 
 	def answer_logout(self, logoutAll=False):
 		if self.is_cross_origin():
