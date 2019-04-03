@@ -223,6 +223,12 @@ def check_consent(user_id, session_id, redirect_uri):
 		(user_id, redirect_uri, session_id))
 	return c.fetchone()
 
+def get_origin(uri):
+	urlparts = urlparse.urlparse(uri)
+	scheme = urlparts.scheme.lower()
+	port = urlparts.port or { 'http':80, 'https':443 }.get(scheme, None)
+	return ('%s://%s:%s' % (scheme, urlparts.hostname or '', port)).lower()
+
 class OIDCRequestHandler(BaseHTTPRequestHandler):
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
@@ -268,26 +274,34 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			pass
 		return (None, None)
 
-	def send_answer(self, body, code=200, content_type='text/plain', other_headers=[]):
+	def is_cross_origin(self):
+		origin_header = self.headers.getheader('Origin')
+		if origin_header in (None, 'null'):
+			return False
+		origins = re.split(r'\s*;\s*', origin_header)
+		return get_origin(args.url) not in map(get_origin, origins)
+
+	def send_answer(self, body, code=200, content_type='text/plain', other_headers=[], cors=False, cache=False):
 		self.send_response(code)
 		self.send_header('Content-type', content_type)
-		self.send_header('Cache-control', 'no-cache, no-store')
 		self.send_header('Content-length', len(body))
-		self.send_header('Access-Control-Allow-Origin', '*')
-		self.send_header('Access-Control-Allow-Credentials', 'true')
-		self.send_header('Access-Control-Allow-Headers', 'Content-Type,User-Agent,DNT,If-Modified-Since,Cache-Control,Range')
-		self.send_header('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Authorization,User,Location,Link,Vary,Last-Modified,ETag,WWW-Authenticate')
-		self.send_header('Access-Control-Max-Age', '60')
+		if not cache:
+			self.send_header('Cache-control', 'no-cache, no-store')
+		if cors:
+			self.send_header('Access-Control-Allow-Origin', '*')
+			self.send_header('Access-Control-Allow-Headers', 'Content-Type,If-Modified-Since,Cache-Control')
+			self.send_header('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Location,Link,Vary,Last-Modified,ETag,WWW-Authenticate')
+			self.send_header('Access-Control-Max-Age', '60')
 		for h, v in other_headers:
 			self.send_header(h, v)
 		self.end_headers()
 		self.wfile.write(body)
 		db.commit()
 
-	def answer_json(self, obj, code=200, content_type='application/json'):
-		return self.send_answer(json.dumps(obj, indent=4), code=code, content_type=content_type)
+	def answer_json(self, obj, content_type='application/json', **kv):
+		return self.send_answer(json.dumps(obj, indent=4), content_type=content_type, **kv)
 
-	def answer_openid_config(self):
+	def answer_openid_config(self, **kv):
 		return self.answer_json({
 			"issuer": args.url,
 			"authorization_endpoint": args.url + self.AUTHORIZE,
@@ -300,9 +314,9 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"id_token_signing_alg_values_supported": [ "RS256" ],
 			"scopes_supported": [ "openid", "webid" ],
 			"grant_types_supported": [ "authorization_code", "implicit" ]
-		})
+		}, cors=True, **kv)
 
-	def answer_jwks(self):
+	def answer_jwks(self, **kv):
 		return self.answer_json({
 			"keys": [
 				{
@@ -314,23 +328,20 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 					"key_ops": [ "verify" ]
 				}
 			]
-		})
+		}, cors=True, **kv)
 
-	def answer_logout(self):
+	def answer_logout(self, logoutAll=False):
+		if self.is_cross_origin():
+			return self.send_answer('cross-origin logout not allowed\n', code=403)
 		cookie = self.get_cookie()
 		if cookie:
 			c = db.cursor()
-			c.execute("DELETE FROM session WHERE cookie = ?", (cookie, ))
+			if logoutAll:
+				c.execute("DELETE FROM session WHERE user = (SELECT user FROM session WHERE cookie = ?)", (cookie, ))
+			else:
+				c.execute("DELETE FROM session WHERE cookie = ?", (cookie, ))
 			return self.send_answer('DELETE %d' % (c.rowcount, ))
-		return self.send_answer('no cookie')
-
-	def answer_logout_all(self):
-		cookie = self.get_cookie()
-		if cookie:
-			c = db.cursor()
-			c.execute("DELETE FROM session WHERE user = (SELECT user FROM session WHERE cookie = ?)", (cookie, ))
-			return self.send_answer('DELETE %d' % (c.rowcount, ))
-		return self.send_answer('no cookie')
+		return self.send_answer('no cookie\n')
 
 	def answer_register(self, requestBody):
 		now = long(time.time())
@@ -350,7 +361,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"client_secret": client_secret,
 			"client_secret_expires_at": expires_on,
 			"redirect_uris": body['redirect_uris']
-		}, code=201)
+		}, code=201, cors=True)
 
 	def answer_token(self, requestBody):
 		params = urlparse.parse_qs(requestBody)
@@ -385,7 +396,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"token_type": "Bearer",
 			"id_token": row['id_token'],
 			"expires_in": max(row['expires_on'] - now, 1)
-		})
+		}, cors=True)
 
 	def answer_authorize(self, query, requestBody):
 		now = long(time.time())
@@ -528,7 +539,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		content_type = mimetypes.guess_type(path)[0] or 'application/octet-stream'
 		try:
 			with open(path, 'rb') as f:
-				return self.send_answer(f.read(), code=200, content_type=content_type)
+				return self.send_answer(f.read(), content_type=content_type)
 		except:
 			return self.send_answer('not found', code=404)
 
@@ -549,7 +560,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			elif path == self.LOGOUT:
 				return self.answer_logout()
 			elif path == self.LOGOUT_ALL:
-				return self.answer_logout_all()
+				return self.answer_logout(logoutAll=True)
 			elif path == self.REGISTER:
 				return self.answer_register(requestBody)
 			elif path == self.TOKEN:
@@ -579,10 +590,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	def do_OPTIONS(self):
 		methods = {
 			self.REGISTER: 'POST, OPTIONS',
-			self.TOKEN: 'POST, OPTIONS',
-			self.AUTHORIZE: 'POST, GET, OPTIONS',
-			self.LOGOUT: 'POST, GET, OPTIONS',
-			self.LOGOUT_ALL: 'POST, GET, OPTIONS'
+			self.TOKEN: 'POST, OPTIONS'
 		}
 
 		urlParts = urlparse.urlparse(self.path)
@@ -590,11 +598,13 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		if path.startswith(urlPathPrefix):
 			path = path[len(urlPathPrefix):]
 
+		cors = False
 		other_headers = []
 		m = methods.get(path, None)
 		if m:
 			other_headers.append(('Access-Control-Allow-Methods', m))
-		self.send_answer('', content_type='text/plain', other_headers=other_headers)
+			cors = True
+		self.send_answer('', content_type='text/plain', other_headers=other_headers, cors=cors)
 
 db.executescript("""
 PRAGMA foreign_keys = on;
