@@ -104,6 +104,15 @@ that use the Authorization Code or Hybrid workflows (that is, clients that
 register one or more response types that include the `code` type); however,
 it is always generated and returned to the registrant.
 
+#### Insecure Mode
+By default the server marks its session cookies "`Secure`" so that the browser
+will only send them over HTTPS connections. To test the server without an
+HTTPS reverse proxy, you can use the `--insecure-mode` option. This will also
+allow dynamic registration of non-HTTPS redirect URIs (although a redirect
+URI of `http://localhost/...` is always allowed). Use of this option is
+**NOT RECOMMENDED** except for testing, and definitely not for sending valuable
+passwords unencrypted over the network.
+
 ### Changing Login and Consent Pages
 Simple Login and Consent pages are in the `./www` directory. You can make
 your own Login and Consent pages and place them either in the same directory,

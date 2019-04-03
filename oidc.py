@@ -64,6 +64,8 @@ parser.add_argument('-i', '--cleanup-interval', type=float,
 	default=60., help='interval between database cleanup runs (default %(default)f)')
 parser.add_argument('--login-url', default="login.html", help='default %(default)s')
 parser.add_argument('--consent-url', default="consent.html", help='default %(default)s')
+parser.add_argument('--insecure-mode', action='store_true',
+	help="don't require HTTPS for session cookies or redirect URIs, for dev/testing")
 parser.add_argument('url', help='my issuer URL prefix')
 
 args = parser.parse_args()
@@ -229,6 +231,15 @@ def get_origin(uri):
 	port = urlparts.port or { 'http':80, 'https':443 }.get(scheme, None)
 	return ('%s://%s:%s' % (scheme, urlparts.hostname or '', port)).lower()
 
+def check_redirect_uris(uris, insecureAllowed):
+	if insecureAllowed:
+		return True
+	for uri in uris:
+		urlparts = urlparse.urlparse(uri)
+		if ('http' == urlparts.scheme.lower()) and ('localhost' != (urlparts.hostname or '').lower()):
+			return False
+	return True
+
 class OIDCRequestHandler(BaseHTTPRequestHandler):
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
@@ -346,9 +357,10 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	def answer_register(self, requestBody):
 		now = long(time.time())
 		body = json.loads(requestBody)
-		# TODO: validate redirect URIs and at least reponse_types conforms to schema
 		response_types = body.get('response_types', ['code'])
 		redirect_uris = body['redirect_uris']
+		if not check_redirect_uris(redirect_uris, args.insecure_mode):
+			return self.answer_json({ "error": "invaild_redirect_uri" }, code=400, cors=True)
 		client_id = make_client_id(response_types, redirect_uris)
 		client_secret = make_client_secret(client_id)
 		expires_on = now + CLIENT_LIFETIME
@@ -425,7 +437,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				location = '%s%s%s' % (location, mode, urlencode(query))
 			other_headers = [('Location', location)]
 			if cookie:
-				other_headers.append(('Set-cookie', '%s=%s; Path=%s; Secure; HttpOnly' % (self.COOKIE, cookie, urlPathPrefix)))
+				other_headers.append(('Set-cookie', '%s=%s; Path=%s;%s HttpOnly' %
+					(self.COOKIE, cookie, urlPathPrefix, '' if args.insecure_mode else 'Secure; ')))
 			print "redirecting:", location
 			return self.send_answer('', code=302, other_headers=other_headers)
 
