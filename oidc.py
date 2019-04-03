@@ -384,9 +384,9 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		grant_type = qparam(params, 'grant_type')
 
 		if None in [client_id, code]:
-			return self.answer_json({"error": "invalid_request"}, code=400)
+			return self.answer_json({"error": "invalid_request"}, code=400, cors=True)
 		if 'authorization_code' != grant_type:
-			return self.answer_json({"error": "unsupported_grant_type"}, code=400)
+			return self.answer_json({"error": "unsupported_grant_type"}, code=400, cors=True)
 
 		c = db.cursor()
 		c.execute(
@@ -398,7 +398,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		if (not row) \
 				or (row['client_id'] != client_id) \
 				or (client_secret != make_client_secret(client_id)):
-			return self.answer_json({"error": "invalid_request"}, code=400)
+			return self.answer_json({"error": "invalid_request"}, code=400, cors=True)
 
 		c.execute("DELETE FROM code WHERE code = ?", (code, ))
 
