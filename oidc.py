@@ -304,8 +304,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		self.send_response(code)
 		self.send_header('Content-type', content_type)
 		self.send_header('Content-length', len(body))
-		if not cache:
-			self.send_header('Cache-control', 'no-cache, no-store')
+		self.send_header('Cache-control', 'max-age=300' if cache else 'no-cache, no-store')
 		if cors:
 			self.send_header('Access-Control-Allow-Origin', '*')
 			self.send_header('Access-Control-Allow-Headers', 'Content-Type,If-Modified-Since,Cache-Control')
@@ -565,7 +564,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		content_type = mimetypes.guess_type(path)[0] or 'application/octet-stream'
 		try:
 			with open(path, 'rb') as f:
-				return self.send_answer(f.read(), content_type=content_type)
+				return self.send_answer(f.read(), content_type=content_type, cache=True)
 		except:
 			return self.send_answer('not found', code=404)
 
