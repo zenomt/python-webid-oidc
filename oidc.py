@@ -26,6 +26,7 @@ import os
 import posixpath
 import re
 import rsa
+import socket
 import sqlite3
 import sys
 import thread
@@ -52,7 +53,7 @@ def b64u_decode(s):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--port', type=int, default=8080, help='listen on port (default %(default)s)')
-parser.add_argument('-a', '--address', default="127.0.0.1", help='listen on address (default %(default)s)')
+parser.add_argument('-a', '--address', default="localhost", help='listen on address (default %(default)s)')
 parser.add_argument('--data', default='./data',
 	help='directory for database and RSA public/private key (default %(default)s)')
 parser.add_argument('--docroot', default='./www',
@@ -66,6 +67,11 @@ parser.add_argument('--login-url', default="login.html", help='default %(default
 parser.add_argument('--consent-url', default="consent.html", help='default %(default)s')
 parser.add_argument('--insecure-mode', action='store_true',
 	help="don't require HTTPS for session cookies or redirect URIs, for dev/testing")
+parser.add_argument('-4', '--ipv4', dest='family', action='store_const', const=socket.AF_INET,
+	help="listen on IPv4 (default)", default=socket.AF_INET)
+parser.add_argument('-6', '--ipv6', dest='family', action='store_const', const=socket.AF_INET6,
+	help="listen on IPv6")
+parser.add_argument('--debug', action='store_true')
 parser.add_argument('url', help='my issuer URL prefix')
 
 args = parser.parse_args()
@@ -241,6 +247,8 @@ def check_redirect_uris(uris, insecureAllowed):
 	return True
 
 class OIDCRequestHandler(BaseHTTPRequestHandler):
+	protocol_version = 'HTTP/1.1'
+
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
 	TOKEN      = 'token'
@@ -365,8 +373,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		client_secret = make_client_secret(client_id)
 		expires_on = now + CLIENT_LIFETIME
 
-		# XXX log properly
-		print "register uris:", compact_json(redirect_uris), "response_types:", compact_json(response_types)
+		self.log_message('register uris: %s response_types: %s', compact_json(redirect_uris), compact_json(response_types))
 
 		self.answer_json({
 			"client_id": client_id,
@@ -439,7 +446,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			if cookie:
 				other_headers.append(('Set-cookie', '%s=%s; Path=%s;%s HttpOnly' %
 					(self.COOKIE, cookie, urlPathPrefix, '' if args.insecure_mode else 'Secure; ')))
-			print "redirecting:", location
+			if args.debug:
+				self.log_message("redirecting to: %s", location)
 			return self.send_answer('', code=302, other_headers=other_headers)
 
 		client = parse_client_id(client_id)
@@ -590,6 +598,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			db.rollback()
 			print traceback.format_exc()
 			self.send_response(500)
+			self.send_header('Content-length', '0')
 			self.end_headers()
 
 	def do_POST(self):
@@ -707,5 +716,11 @@ db.commit()
 
 start_cleanup_thread()
 
-httpd = HTTPServer((args.address, args.port), OIDCRequestHandler)
+class HTTPServerFamily(HTTPServer):
+	def __init__(self, server_address, request_handler_class, family=None):
+		if family:
+			self.address_family = family
+		return HTTPServer.__init__(self, server_address, request_handler_class)
+
+httpd = HTTPServerFamily((args.address, args.port), OIDCRequestHandler, args.family)
 httpd.serve_forever()
