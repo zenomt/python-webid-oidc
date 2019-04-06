@@ -481,6 +481,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 					redirect_query['form_key'] = make_formkey()
 					return send_redirect(urlparse.urljoin(urlPathPrefix, args.login_url), query=redirect_query, mode='#')
 				# at this point user just logged in with password
+				self.log_message("authenticated %s <%s>", login_user['username'], login_user['webid'])
 				if (not session_user) or (session_user['user'] != login_user['id']):
 					if cookie:
 						c.execute("DELETE FROM session WHERE cookie = ?", (cookie, ))
@@ -489,6 +490,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 						(cookie, login_user['id'], self.real_client_address(), self.headers.getheader('user-agent')))
 					c.execute("SELECT session.id as session_id, * FROM session JOIN user ON session.user = user.id WHERE session.id = ?", (c.lastrowid, ))
 					session_user = c.fetchone()
+					self.log_message("session created %s <%s>", session_user['username'], session_user['webid'])
 				else:
 					c.execute("UPDATE session SET authed_on = ? WHERE id = ?", (now, session_user['session_id']))
 					just_authed_on = now
@@ -500,6 +502,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				c.execute("INSERT INTO consent (expires_on, user, redirect_uri, session) VALUES (?, ?, ?, ?)",
 					(consent_expires, session_user['user'], redirect_uri, consent_session))
 				redirect_query['prompt'] = prompt = None
+				self.log_message("consent %s <%s> -> %s", session_user['username'], session_user['webid'], redirect_uri)
 
 		authed_on = just_authed_on or (session_user['authed_on'] if session_user else None)
 		max_age = qparam(params, 'max_age')
@@ -544,6 +547,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		token_rowid = c.lastrowid
 		if code:
 			c.execute("INSERT INTO code (code, token) VALUES (?, ?)", (code, token_rowid))
+
+		self.log_message("issuing tokens %s <%s> -> %s", session_user['username'], session_user['webid'], redirect_uri)
 
 		return send_redirect(redirect_uri, query=response_query, cookie=cookie)
 
