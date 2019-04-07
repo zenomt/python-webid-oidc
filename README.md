@@ -27,10 +27,10 @@ All other components depend only on standard Python 2.7 library modules.
 
 `oidc.py`
 ---------
-This is the server. By default it listens on IPv4 localhost `127.0.0.1` port
-`8080` for HTTP requests forwarded by the HTTPS reverse proxy. Its one required
-parameter is its own OIDC Issuer URL.  For example, if your issuer URL is
-`https://example.com/oidc/`, run the server with
+This is the server. By default it listens on IPv4 `localhost` port `8080` for
+HTTP requests forwarded by the HTTPS reverse proxy. Its one required parameter
+is its own OIDC Issuer URL.  For example, after [setting up](#setup), if your
+issuer URL is `https://example.com/oidc/`, run the server with
 
 	$ python oidc.py https://example.com/oidc/
 
@@ -45,6 +45,7 @@ The server exposes the following endpoints below the issuer URL:
   - `register` -- [Dynamic registration][oidc-reg]
   - `logout` -- Log out current session
   - `logout-all` -- Log out all sessions for the current session's user
+  - `userinfo` -- [Userinfo][oidc-userinfo]
 
 The server will attempt to serve any files not having names of the above
 endpoints if present in the `--docroot` directory (by default, `./www`). For
@@ -253,14 +254,15 @@ Future Work
   - Refresh tokens
 
 
-  [WebID-OIDC]:  https://github.com/solid/webid-oidc-spec
-  [nginx]:       http://nginx.org
-  [data]:        data/README.md
-  [pbkdf2]:      https://tools.ietf.org/html/rfc8018#section-5.2
-  [WAC]:         https://github.com/solid/web-access-control-spec
-  [solid]:       https://github.com/solid/solid
-  [oidc-config]: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
-  [oidc-reg]:    https://openid.net/specs/openid-connect-registration-1_0.html
-  [oidc-auth]:   https://openid.net/specs/openid-connect-core-1_0.html#AuthorizationEndpoint
-  [oidc-token]:  https://openid.net/specs/openid-connect-core-1_0.html#TokenEndpoint
-  [jwks]:        https://tools.ietf.org/html/rfc7517#section-5
+  [WebID-OIDC]:    https://github.com/solid/webid-oidc-spec
+  [nginx]:         http://nginx.org
+  [data]:          data/README.md
+  [pbkdf2]:        https://tools.ietf.org/html/rfc8018#section-5.2
+  [WAC]:           https://github.com/solid/web-access-control-spec
+  [solid]:         https://github.com/solid/solid
+  [oidc-config]:   https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+  [oidc-reg]:      https://openid.net/specs/openid-connect-registration-1_0.html
+  [oidc-auth]:     https://openid.net/specs/openid-connect-core-1_0.html#AuthorizationEndpoint
+  [oidc-token]:    https://openid.net/specs/openid-connect-core-1_0.html#TokenEndpoint
+  [oidc-userinfo]: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+  [jwks]:          https://tools.ietf.org/html/rfc7517#section-5

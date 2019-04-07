@@ -256,6 +256,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	REGISTER   = 'register'
 	LOGOUT     = 'logout'
 	LOGOUT_ALL = 'logout-all'
+	USERINFO   = 'userinfo'
 
 	COOKIE     = 'oidc_session'
 
@@ -279,19 +280,26 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 					if key == name:
 						return val
 
-	def get_basic_auth(self):
+	def get_auth_header(self, header_type):
 		try:
 			header = self.headers.getheader('Authorization')
 			if header:
 				authtype, val = re.split(r'\s+', header, 1)
-				if authtype.lower() != 'basic':
-					raise ValueError
-				parts = b64_decode(val).split(':', 1)
-				parts.append(None)
-				return tuple(parts[:2])
+				if authtype.lower() == header_type.lower():
+					return val
 		except:
 			pass
+
+	def get_basic_auth(self):
+		auth = self.get_auth_header('Basic')
+		if auth:
+			parts = b64_decode(auth).split(':', 1)
+			parts.append(None)
+			return tuple(parts[:2])
 		return (None, None)
+
+	def get_bearer_auth(self):
+		return self.get_auth_header('Bearer')
 
 	def is_cross_origin(self):
 		origin_header = self.headers.getheader('Origin')
@@ -331,7 +339,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"subject_types_supported": ["public"],
 			"id_token_signing_alg_values_supported": [ "RS256" ],
 			"scopes_supported": [ "openid", "webid" ],
-			"grant_types_supported": [ "authorization_code", "implicit" ]
+			"grant_types_supported": [ "authorization_code", "implicit" ],
+			"userinfo_endpoint": args.url + self.USERINFO
 		}, cors=True)
 
 	def answer_jwks(self):
@@ -551,6 +560,21 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 
 		return send_redirect(redirect_uri, query=response_query, cookie=cookie)
 
+	def answer_userinfo(self, requestBody):
+		params = urlparse.parse_qs(requestBody)
+		access_token = qparam(params, 'access_token') or self.get_bearer_auth()
+		if access_token:
+			c = db.cursor()
+			c.execute("SELECT token.expires_on as token_exp, * "
+					"FROM token JOIN session ON token.session = session.id JOIN user ON session.user = user.id "
+					"WHERE access_token = ?",
+				(access_token, ))
+			row = c.fetchone()
+			if row:
+				return self.answer_json({ "sub": row['webid'], "webid": row['webid'], "exp": row['token_exp'] }, cors=True)
+			return self.send_answer('', code=401, cors=True, other_headers=[('WWW-Authenticate', 'Bearer error="invalid_token"')])
+		return self.send_answer('', code=401, cors=True, other_headers=[('WWW-Authenticate', 'Bearer')])
+
 	def answer_file(self, path):
 		path = posixpath.normpath(path)
 		words = path.split('/')
@@ -592,6 +616,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				return self.answer_token(requestBody)
 			elif path == self.AUTHORIZE:
 				return self.answer_authorize(query, requestBody)
+			elif path == self.USERINFO:
+				return self.answer_userinfo(requestBody)
 
 			if 'GET' == self.command:
 				return self.answer_file(path)
