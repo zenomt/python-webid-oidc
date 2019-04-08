@@ -15,6 +15,7 @@ Components:
   - `oidc.py`: the WebID-OIDC Provider server
   - `wopasswd.py`: the user management tool
   - `pwhash.py`: stand-alone password hash tool, for non-admin users to run
+  - `wosession.py`: display admin information about sessions and issued tokens
 
 Run any component with the `-h` command-line option for help.
 
@@ -209,7 +210,29 @@ for the user (assuming account `username` already exists in this example):
 (Note the use of single-quotes `'` in this example, since the hashed password
 includes the `$` character which has special meaning to most Unix shells).
 
+`wosession.py`
+--------------
+This tool displays information of administrative interest about current
+sessions for a specific user.
 
+	$ python wosession.py username
+	login           last-auth       updated         host  
+	04/07 12:55:14  04/07 14:33:29  04/07 19:24:45  2001:db8::2
+	04/07 19:10:47  @ login         04/07 19:10:49  198.51.100.5
+
+To include information about id tokens, access tokens, and unredeemed
+authorization codes, use the `-t` option:
+
+	$ python wosession.py username -t
+	login           last-auth       updated         host  
+	04/07 12:55:14  04/07 14:33:29  04/07 19:24:45  2001:db8::2
+	        issued          remain  i a  uri
+	        04/07 18:29:53  -04:51  ✓ ✓  https://example.com/oidc/info.html
+	        04/07 19:11:23  -46:20  ✓ ✓  https://example.com/oidc/info.html
+	    co  04/07 19:24:45  -59:43  ✓ ✓  https://example.com/oidc/info.html
+	04/07 19:10:47  @ login         04/07 19:10:49  198.51.100.5
+	        issued          remain  i a  uri
+	        04/07 19:10:49  -45:47  ✓ ✓  https://example.com/oidc/info.html
 
 `info.html`
 -----------
