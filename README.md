@@ -229,7 +229,7 @@ authorization codes, use the `-t` option:
 	        issued          remain  i a  uri
 	        04/07 18:29:53  -04:51  ✓ ✓  https://example.com/oidc/info.html
 	        04/07 19:11:23  -46:20  ✓ ✓  https://example.com/oidc/info.html
-	    co  04/07 19:24:45  -59:43  ✓ ✓  https://example.com/oidc/info.html
+	    co  04/07 19:24:45  -59:43  ✓ ✓  https://another.example.com/app/oauth-code
 	04/07 19:10:47  @ login         04/07 19:10:49  198.51.100.5
 	        issued          remain  i a  uri
 	        04/07 19:10:49  -45:47  ✓ ✓  https://example.com/oidc/info.html
@@ -270,10 +270,6 @@ session, consent is granted to a client's Redirect URI instead of to the
 Future Work
 -----------
   - An interface for users to revoke consent for a URI
-  - Better logging
-  - Session and token inspection
-    - Display the user's IP address, user agent, login time, etc
-    - Display tokens' redirect URI, issue time, etc
   - Refresh tokens
 
 
