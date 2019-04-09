@@ -103,13 +103,18 @@ def cleanup_thread():
 	cleanup_db.executescript("PRAGMA foreign_keys = on;")
 	while True:
 		now = time.time()
-		c = cleanup_db.cursor()
-		c.execute("DELETE FROM session WHERE expires_on < ?", (now, ))
-		c.execute("DELETE FROM token WHERE expires_on < ?", (now, ))
-		c.execute("DELETE FROM code WHERE expires_on < ?", (now, ))
-		c.execute("DELETE FROM formkey WHERE expires_on < ?", (now, ))
-		c.execute("DELETE FROM consent WHERE expires_on < ?", (now, ))
-		cleanup_db.commit()
+		try:
+			c = cleanup_db.cursor()
+			c.execute("DELETE FROM session WHERE expires_on < ?", (now, ))
+			c.execute("DELETE FROM token WHERE expires_on < ?", (now, ))
+			c.execute("DELETE FROM code WHERE expires_on < ?", (now, ))
+			c.execute("DELETE FROM formkey WHERE expires_on < ?", (now, ))
+			c.execute("DELETE FROM consent WHERE expires_on < ?", (now, ))
+			cleanup_db.commit()
+		except sqlite3.OperationalError:
+			cleanup_db.rollback()
+			print traceback.format_exc()
+			print "will retry in", args.cleanup_interval
 		time.sleep(args.cleanup_interval)
 
 def start_cleanup_thread():
@@ -247,8 +252,6 @@ def check_redirect_uris(uris, insecureAllowed):
 	return True
 
 class OIDCRequestHandler(BaseHTTPRequestHandler):
-	protocol_version = 'HTTP/1.1'
-
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
 	TOKEN      = 'token'
@@ -539,8 +542,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		# if we get this far, we're logged in with a cookie and have given consent.
 		# create code, token, id_token, redirect
 		code = random_token() if 'code' in response_types else None
-		access_token = make_id_token(session_user['webid'], client_id, authed_on, scope="openid webid") \
-			if code or 'token' in response_types else None
+		access_token = random_token() if code or 'token' in response_types else None
 		id_token = make_id_token(session_user['webid'], client_id, authed_on, nonce=nonce,
 			access_token=access_token, code=code)
 		response_query = dict(state=state, code=code, expires_in=args.token_lifetime, scope="openid webid")
@@ -590,7 +592,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			with open(path, 'rb') as f:
 				return self.send_answer(f.read(), content_type=content_type, cache=True)
 		except:
-			return self.send_answer('not found', code=404)
+			pass
+		return self.send_answer('not found', code=404)
 
 	def process_request(self, requestBody):
 		try:

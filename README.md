@@ -227,13 +227,13 @@ authorization codes, use the `-t` option:
 	login           last-auth       updated         host  
 	04/07 12:55:14  04/07 14:33:29  04/07 19:24:45  2001:db8::2
 	        issued          remain  i a  uri
-	        04/07 18:29:53  -04:51  ✓ ✓  https://example.com/oidc/info.html
-	        04/07 19:11:23  -46:20  ✓ ✓  https://example.com/oidc/info.html
-	    co  04/07 19:24:45  -59:43  ✓ ✓  https://another.example.com/app/oauth-code
+	        04/07 18:29:53   04:51  ✓ ✓  https://example.com/oidc/info.html
+	        04/07 19:11:23   46:20  ✓ ✓  https://example.com/oidc/info.html
+	    co  04/07 19:24:45   59:43  ✓ ✓  https://another.example.com/app/oauth-code
 	
 	04/07 19:10:47  @ login         04/07 19:10:49  198.51.100.5
 	        issued          remain  i a  uri
-	        04/07 19:10:49  -45:47  ✓ ✓  https://example.com/oidc/info.html
+	        04/07 19:10:49   45:47  ✓ ✓  https://example.com/oidc/info.html
 
 `info.html`
 -----------
