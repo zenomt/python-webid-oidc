@@ -1,10 +1,10 @@
 Simple WebID-OIDC Provider in Python
 ====================================
-This is a simple [WebID-OIDC][WebID-OIDC] (WebID OpenID-Connect) Provider
+This is a simple [WebID-OIDC][webid-oidc] (WebID OpenID Connect) Provider
 written in Python 2.7, intended for small deployments of one-to-a-few users
 who implicitly trust the administrator.  It is written to be audit-able,
 understandable, easy to modify, and easy to deploy (with minimal dependencies)
-as a stand-alone component for use with [Web Access Control][WAC] and
+as a stand-alone component for use with [Web Access Control][wac] and
 [Social Linked Data][solid].
 
 The server is intended to be deployed behind an HTTPS reverse proxy, such as
@@ -39,7 +39,7 @@ The supplied issuer URL must end with a slash.
 
 The server exposes the following endpoints below the issuer URL:
 
-  - `.well-known/openid-configuration` -- [The OpenID-Connect configuration][oidc-config] file
+  - `.well-known/openid-configuration` -- [The OpenID Connect configuration][oidc-config] file
   - `authorize` -- [Authorization][oidc-auth]
   - `token` -- [Token][oidc-token] (for Authorization Code and Hybrid flows)
   - `jwks` -- [JSON Web Key Set][jwks] for the RSA public key
@@ -275,11 +275,11 @@ Future Work
   - OpenID Session Management
 
 
-  [WebID-OIDC]:    https://github.com/solid/webid-oidc-spec
+  [webid-oidc]:    https://github.com/solid/webid-oidc-spec
   [nginx]:         http://nginx.org
   [data]:          data/README.md
   [pbkdf2]:        https://tools.ietf.org/html/rfc8018#section-5.2
-  [WAC]:           https://github.com/solid/web-access-control-spec
+  [wac]:           https://github.com/solid/web-access-control-spec
   [solid]:         https://github.com/solid/solid
   [oidc-config]:   https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
   [oidc-reg]:      https://openid.net/specs/openid-connect-registration-1_0.html
