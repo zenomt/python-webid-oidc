@@ -247,10 +247,10 @@ Registration and generate a new ID Token each time it is loaded.
 Security Considerations
 -----------------------
 Passwords are stored hashed using
-[Password-Based Key Derivation Function 2][pbkdf2]. By default `wopasswd.py`
-and `pwhash.py` use 100,000 iterations and `HMAC-SHA512` as the pseudorandom
-function. As computers get faster, the default number of iterations may be
-insufficient.
+[PKCS #5 Password-Based Key Derivation Function 2][pbkdf2]. By default
+`wopasswd.py` and `pwhash.py` use 100,000 iterations and `HMAC-SHA512` as the
+pseudorandom function. As computers get faster, the default number of iterations
+may be insufficient.
 
 While passwords are stored in hashed form, the login page sends the user's
 plain password in the body of an `HTTP POST` to the server. Though the
@@ -272,6 +272,7 @@ Future Work
 -----------
   - An interface for users to revoke consent for a URI
   - Refresh tokens
+  - OpenID Session Management
 
 
   [WebID-OIDC]:    https://github.com/solid/webid-oidc-spec

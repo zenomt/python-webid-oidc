@@ -269,10 +269,11 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		return forwarded_for or self.client_address[0]
 
 	def log_message(self, format, *args):
-		sys.stderr.write("%s - - [%s] %s\n" %
+		sys.stdout.write("%s - - [%s] %s\n" %
 			(self.real_client_address(),
 			self.log_date_time_string(),
 			format % args))
+		sys.stdout.flush()
 
 	def get_cookie(self, name = COOKIE):
 			header = self.headers.getheader('Cookie')
@@ -317,7 +318,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		self.send_header('Content-length', len(body))
 		self.send_header('Cache-control', 'max-age=300' if cache else 'no-cache, no-store')
 		if cors:
-			self.send_header('Access-Control-Allow-Origin', '*')
+			self.send_header('Access-Control-Allow-Origin', self.headers.getheader('Origin') or '*')
 			self.send_header('Access-Control-Allow-Headers', 'Content-Type,If-Modified-Since,Cache-Control')
 			self.send_header('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Location,Link,Vary,Last-Modified,ETag,WWW-Authenticate')
 			self.send_header('Access-Control-Max-Age', '60')
@@ -665,7 +666,7 @@ db.executescript("""
 PRAGMA foreign_keys = on;
 
 CREATE TABLE IF NOT EXISTS user (
-	id       INTEGER PRIMARY KEY,
+	id       INTEGER PRIMARY KEY AUTOINCREMENT,
 	enabled  BOOLEAN,
 	username TEXT UNIQUE NOT NULL,
 	pwhash   TEXT NOT NULL,
@@ -674,7 +675,7 @@ CREATE TABLE IF NOT EXISTS user (
 );
 
 CREATE TABLE IF NOT EXISTS session (
-	id         INTEGER PRIMARY KEY,
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	cookie     TEXT UNIQUE NOT NULL,
 	created_on INTEGER DEFAULT (strftime('%s', 'now')),
 	expires_on INTEGER DEFAULT (strftime('%s', 'now', '+1 day')),
@@ -689,7 +690,7 @@ CREATE TABLE IF NOT EXISTS session (
 CREATE INDEX IF NOT EXISTS session_user ON session ( user );
 
 CREATE TABLE IF NOT EXISTS consent (
-	id           INTEGER PRIMARY KEY,
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_on   INTEGER DEFAULT (strftime('%s', 'now')),
 	expires_on   INTEGER DEFAULT (strftime('%s', 'now', '+1 day')),
 	user         INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
@@ -702,7 +703,7 @@ CREATE INDEX IF NOT EXISTS consent_user_uri ON consent ( user, redirect_uri );
 CREATE INDEX IF NOT EXISTS consent_session ON consent ( session );
 
 CREATE TABLE IF NOT EXISTS token (
-	id           INTEGER PRIMARY KEY,
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_on   INTEGER DEFAULT (strftime('%s', 'now')),
 	expires_on   INTEGER DEFAULT (strftime('%s', 'now', '+1 hour')),
 	session      INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
@@ -718,7 +719,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS token_idx ON token ( access_token )
 CREATE INDEX IF NOT EXISTS token_session ON token ( session );
 
 CREATE TABLE IF NOT EXISTS code (
-	id         INTEGER PRIMARY KEY,
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	code       TEXT UNIQUE NOT NULL,
 	created_on INTEGER DEFAULT (strftime('%s', 'now')),
 	expires_on INTEGER DEFAULT (strftime('%s', 'now', '+10 minutes')),
