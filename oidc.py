@@ -154,18 +154,21 @@ def check_password(password, pwhash):
 def b64u_hmacsha512(key, msg):
 	return b64u_encode(hmac.new(bytes(key), bytes(msg), digestmod=hashlib.sha512).digest())
 
-def make_id_token(webid, audience, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, scope=None):
+def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, scope=None, redirect_uri=None):
 	now = time.time()
+	aud = [ client_id ]
+	if redirect_uri:
+		aud.append(redirect_uri)
 	token = {
 		"webid": webid,
 		"iss": args.url,
 		"sub": webid,
-		"aud": audience,
+		"aud": aud,
 		"exp": long(now + lifetime),
 		"iat": long(now),
 		"auth_time": long(auth_time),
 		"acr": "0",
-		"azp": audience,
+		"azp": client_id,
 		"jti": str(uuid.uuid4())
 	}
 	if nonce:
@@ -447,6 +450,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			state=state, response_type=response_type, response_mode=response_mode)
 		response_mode_char = '?' if 'query' == response_mode else '#'
 		response_types = response_type.split(' ')
+		scope = (qparam(params, 'scope') or "openid").split(" ")
 
 		if not all((client_id, redirect_uri, response_type)):
 			return self.answer_json({"error": "invalid_request"}, code=400)
@@ -545,7 +549,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		code = random_token() if 'code' in response_types else None
 		access_token = random_token() if code or 'token' in response_types else None
 		id_token = make_id_token(session_user['webid'], client_id, authed_on, nonce=nonce,
-			access_token=access_token, code=code)
+			access_token=access_token, code=code, redirect_uri=redirect_uri if "webid" in scope else None)
 		response_query = dict(state=state, code=code, expires_in=args.token_lifetime, scope="openid webid")
 		if 'id_token' in response_types:
 			response_query['id_token'] = id_token
