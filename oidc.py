@@ -154,7 +154,7 @@ def check_password(password, pwhash):
 def b64u_hmacsha512(key, msg):
 	return b64u_encode(hmac.new(bytes(key), bytes(msg), digestmod=hashlib.sha512).digest())
 
-def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, scope=None, redirect_uri=None):
+def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, redirect_uri=None):
 	now = time.time()
 	aud = [ client_id ]
 	if redirect_uri:
@@ -177,8 +177,6 @@ def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None
 		token['at_hash'] = b64u_encode(hashlib.sha256(access_token).digest()[:16])
 	if code:
 		token['c_hash'] = b64u_encode(hashlib.sha256(code).digest()[:16])
-	if scope:
-		token['scope'] = scope
 	return make_jwt(token)
 
 def random_token():
