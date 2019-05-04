@@ -183,7 +183,7 @@ def random_token():
 	return b64u_encode(os.urandom(args.random_token_length))
 
 def canonicalize_response_type(s):
-	types = s.split(' ')
+	types = s.split()
 	types.sort()
 	return ' '.join(types)
 
@@ -442,13 +442,14 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		prompt = qparam(params, 'prompt')
 		nonce = qparam(params, 'nonce')
 		state = qparam(params, 'state')
+		scope = qparam(params, 'scope') or "openid"
 		response_type = canonicalize_response_type(qparam(params, 'response_type') or '')
 		response_mode = qparam(params, 'response_mode') or ('query' if 'code' == response_type else 'fragment')
 		redirect_query = dict(client_id=client_id, redirect_uri=redirect_uri, prompt=prompt, nonce=nonce,
-			state=state, response_type=response_type, response_mode=response_mode)
+			state=state, response_type=response_type, response_mode=response_mode, scope=scope)
 		response_mode_char = '?' if 'query' == response_mode else '#'
-		response_types = response_type.split(' ')
-		scope = (qparam(params, 'scope') or "openid").split(" ")
+		response_types = response_type.split()
+		scopes = scope.split()
 
 		if not all((client_id, redirect_uri, response_type)):
 			return self.answer_json({"error": "invalid_request"}, code=400)
@@ -547,7 +548,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		code = random_token() if 'code' in response_types else None
 		access_token = random_token() if code or 'token' in response_types else None
 		id_token = make_id_token(session_user['webid'], client_id, authed_on, nonce=nonce,
-			access_token=access_token, code=code, redirect_uri=redirect_uri if "webid" in scope else None)
+			access_token=access_token, code=code, redirect_uri=redirect_uri if "webid" in scopes else None)
 		response_query = dict(state=state, code=code, expires_in=args.token_lifetime, scope="openid webid")
 		if 'id_token' in response_types:
 			response_query['id_token'] = id_token
