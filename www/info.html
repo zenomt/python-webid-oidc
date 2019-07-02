@@ -50,7 +50,6 @@ async function authorize() {
 	var registration = await fetch("register", {
 		method: "POST",
 		headers: new Headers({"Content-type": "application/json"}),
-		credentials: "include",
 		body: JSON.stringify( {
 			response_types: [ "id_token token" ],
 			redirect_uris: [ myUri ]

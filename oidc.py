@@ -154,7 +154,7 @@ def check_password(password, pwhash):
 def b64u_hmacsha512(key, msg):
 	return b64u_encode(hmac.new(bytes(key), bytes(msg), digestmod=hashlib.sha512).digest())
 
-def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, redirect_uri=None):
+def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, redirect_uri=None, cnf=None):
 	now = time.time()
 	aud = [ client_id ]
 	if redirect_uri:
@@ -177,6 +177,8 @@ def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None
 		token['at_hash'] = b64u_encode(hashlib.sha256(access_token).digest()[:16])
 	if code:
 		token['c_hash'] = b64u_encode(hashlib.sha256(code).digest()[:16])
+	if cnf:
+		token['cnf'] = cnf
 	return make_jwt(token)
 
 def random_token():
@@ -252,6 +254,14 @@ def check_redirect_uris(uris, insecureAllowed):
 			return False
 	return True
 
+def parse_confirmation_req(req_cnf):
+	try:
+		if req_cnf:
+			rv = json.loads(b64u_decode(req_cnf))
+			return rv if isinstance(rv, dict) else None
+	except:
+		pass
+
 class OIDCRequestHandler(BaseHTTPRequestHandler):
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
@@ -320,9 +330,6 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		self.send_header('Cache-control', 'max-age=300' if cache else 'no-cache, no-store')
 		if cors:
 			self.send_header('Access-Control-Allow-Origin', self.headers.getheader('Origin') or '*')
-			self.send_header('Access-Control-Allow-Headers', 'Content-Type,If-Modified-Since,Cache-Control')
-			self.send_header('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Location,Link,Vary,Last-Modified,ETag,WWW-Authenticate')
-			self.send_header('Access-Control-Max-Age', '60')
 		for h, v in other_headers:
 			self.send_header(h, v)
 		self.end_headers()
@@ -402,6 +409,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		client_secret = qparam(params, 'client_secret') or client_secret
 		code = qparam(params, 'code')
 		grant_type = qparam(params, 'grant_type')
+		code_verifier = qparam(params, 'code_verifier') or ''
 
 		if None in [client_id, code]:
 			return self.answer_json({"error": "invalid_request"}, code=400, cors=True)
@@ -410,7 +418,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 
 		c = db.cursor()
 		c.execute(
-			"""SELECT client_id, id_token, access_token, token.expires_on
+			"""SELECT client_id, id_token, access_token, token.expires_on, challenge
 				FROM code JOIN token ON code.token = token.id
 				WHERE code.code = ?""",
 			(code, ))
@@ -418,7 +426,11 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		if (not row) \
 				or (row['client_id'] != client_id) \
 				or (client_secret != make_client_secret(client_id)):
-			return self.answer_json({"error": "invalid_request"}, code=400, cors=True)
+			return self.answer_json({"error": "invalid_grant"}, code=400, cors=True)
+		if row['challenge'] and \
+				(b64u_encode(hashlib.sha256(bytes(code_verifier)).digest()) != row['challenge']):
+			print row['challenge'], "!=", b64u_encode(hashlib.sha256(bytes(code_verifier)).digest()), code_verifier
+			return self.answer_json({"error": "invalid_grant", "description": "PKCE verification failed"}, code=400, cors=True)
 
 		c.execute("DELETE FROM code WHERE code = ?", (code, ))
 
@@ -443,13 +455,18 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		nonce = qparam(params, 'nonce')
 		state = qparam(params, 'state')
 		scope = qparam(params, 'scope') or "openid"
+		req_cnf = qparam(params, 'req_cnf')
+		code_challenge = qparam(params, 'code_challenge')
+		code_challenge_method = qparam(params, 'code_challenge_method')
 		response_type = canonicalize_response_type(qparam(params, 'response_type') or '')
 		response_mode = qparam(params, 'response_mode') or ('query' if 'code' == response_type else 'fragment')
 		redirect_query = dict(client_id=client_id, redirect_uri=redirect_uri, prompt=prompt, nonce=nonce,
-			state=state, response_type=response_type, response_mode=response_mode, scope=scope)
+			state=state, response_type=response_type, response_mode=response_mode, scope=scope, req_cnf=req_cnf,
+			code_challenge=code_challenge, code_challenge_method=code_challenge_method)
 		response_mode_char = '?' if 'query' == response_mode else '#'
 		response_types = response_type.split()
 		scopes = scope.split()
+		cnf = parse_confirmation_req(req_cnf)
 
 		if not all((client_id, redirect_uri, response_type)):
 			return self.answer_json({"error": "invalid_request"}, code=400)
@@ -472,6 +489,10 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			return self.answer_json({"error": "unsupported_response_type"}, code=400)
 		if redirect_uri_hash(redirect_uri) not in client['redirect_uri_hashes']:
 			return self.answer_json({"error": "invalid_request", "description": "unregistered redirect uri"}, code=400)
+		if req_cnf and not cnf:
+			return self.answer_json({"error": "invalid_request", "description": "invalid req_cnf"}, code=400)
+		if code_challenge_method and code_challenge_method not in ["S256"]:
+			return self.answer_json({"error": "invalid_request", "description": "unrecognized code_challenge_method"}, code=400)
 
 		session_user = None
 		just_authed_on = None
@@ -547,7 +568,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		# create code, token, id_token, redirect
 		code = random_token() if 'code' in response_types else None
 		access_token = random_token() if code or 'token' in response_types else None
-		id_token = make_id_token(session_user['webid'], client_id, authed_on, nonce=nonce,
+		id_token = make_id_token(session_user['webid'], client_id, authed_on, nonce=nonce, cnf=cnf,
 			access_token=access_token, code=code, redirect_uri=redirect_uri if "webid" in scopes else None)
 		response_query = dict(state=state, code=code, expires_in=args.token_lifetime, scope="openid webid")
 		if 'id_token' in response_types:
@@ -560,7 +581,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			(now + args.token_lifetime, session_user['session_id'], client_id, redirect_uri, id_token, access_token))
 		token_rowid = c.lastrowid
 		if code:
-			c.execute("INSERT INTO code (code, token) VALUES (?, ?)", (code, token_rowid))
+			c.execute("INSERT INTO code (code, token, challenge) VALUES (?, ?, ?)", (code, token_rowid, code_challenge))
 
 		self.log_message("issuing tokens %s <%s> -> %s", session_user['username'], session_user['webid'], redirect_uri)
 
@@ -658,7 +679,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			path = path[len(urlPathPrefix):]
 
 		cors = False
-		other_headers = []
+		other_headers = [('Access-Control-Max-Age', '60'), ('Access-Control-Allow-Headers', 'Content-Type')]
 		m = methods.get(path, None)
 		if m:
 			other_headers.append(('Access-Control-Allow-Methods', m))
@@ -726,7 +747,8 @@ CREATE TABLE IF NOT EXISTS code (
 	code       TEXT UNIQUE NOT NULL,
 	created_on INTEGER DEFAULT (strftime('%s', 'now')),
 	expires_on INTEGER DEFAULT (strftime('%s', 'now', '+10 minutes')),
-	token      INTEGER NOT NULL REFERENCES token(id) ON DELETE CASCADE
+	token      INTEGER NOT NULL REFERENCES token(id) ON DELETE CASCADE,
+	challenge  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS code_token ON code ( token );
