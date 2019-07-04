@@ -484,7 +484,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		response_types = response_type.split()
 		scopes = scope.split()
 		request_key = request_obj.get('key')
-		cnf = parse_confirmation_req(req_cnf) or (dict(jwk=request_key) if request_key else None)
+		cnf = dict(jwk=request_key) if request_key else parse_confirmation_req(req_cnf)
 
 		if not all((client_id, redirect_uri, response_type)):
 			return self.answer_json({"error": "invalid_request"}, code=400)
@@ -602,6 +602,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			c.execute("INSERT INTO code (code, token, challenge) VALUES (?, ?, ?)", (code, token_rowid, code_challenge))
 
 		self.log_message("issuing tokens %s <%s> -> %s", session_user['username'], session_user['webid'], redirect_uri)
+		if args.debug and id_token:
+			self.log_message("id_token: %s", id_token)
 
 		return send_redirect(redirect_uri, query=response_query, cookie=cookie)
 
