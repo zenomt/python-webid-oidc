@@ -262,6 +262,15 @@ def parse_confirmation_req(req_cnf):
 	except:
 		pass
 
+def dirty_jwt_get_unverified_claims(jwt):
+	# assume a well-formed JWT, parse second chunk as base64url(json)
+	try:
+		parts = jwt.split('.')
+		claims = json.loads(b64u_decode(parts[1]))
+		return claims if isinstance(claims, dict) else None
+	except:
+		pass
+
 class OIDCRequestHandler(BaseHTTPRequestHandler):
 	CONFIG     = '.well-known/openid-configuration'
 	AUTHORIZE  = 'authorize'
@@ -352,7 +361,9 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			"id_token_signing_alg_values_supported": [ "RS256" ],
 			"scopes_supported": [ "openid", "webid" ],
 			"grant_types_supported": [ "authorization_code", "implicit" ],
-			"userinfo_endpoint": args.url + self.USERINFO
+			"userinfo_endpoint": args.url + self.USERINFO,
+			"request_parameter_supported": True,
+			"request_uri_parameter_supported": False
 		}, cors=True)
 
 	def answer_jwks(self):
@@ -449,24 +460,31 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		cookie = self.get_cookie()
 		c = db.cursor()
 
-		client_id = qparam(params, 'client_id')
-		redirect_uri = qparam(params, 'redirect_uri')
-		prompt = qparam(params, 'prompt')
-		nonce = qparam(params, 'nonce')
-		state = qparam(params, 'state')
-		scope = qparam(params, 'scope') or "openid"
-		req_cnf = qparam(params, 'req_cnf')
-		code_challenge = qparam(params, 'code_challenge')
-		code_challenge_method = qparam(params, 'code_challenge_method')
-		response_type = canonicalize_response_type(qparam(params, 'response_type') or '')
-		response_mode = qparam(params, 'response_mode') or ('query' if 'code' == response_type else 'fragment')
+		request_param = qparam(params, 'request')
+		request_obj = dirty_jwt_get_unverified_claims(request_param) or {}
+
+		def get_param(key):
+			return request_obj.get(key) or qparam(params, key)
+
+		client_id = get_param('client_id')
+		redirect_uri = get_param('redirect_uri')
+		prompt = get_param('prompt')
+		nonce = get_param('nonce')
+		state = get_param('state')
+		scope = get_param('scope') or "openid"
+		req_cnf = get_param('req_cnf')
+		code_challenge = get_param('code_challenge')
+		code_challenge_method = get_param('code_challenge_method')
+		response_type = canonicalize_response_type(get_param('response_type') or '')
+		response_mode = get_param('response_mode') or ('query' if 'code' == response_type else 'fragment')
 		redirect_query = dict(client_id=client_id, redirect_uri=redirect_uri, prompt=prompt, nonce=nonce,
 			state=state, response_type=response_type, response_mode=response_mode, scope=scope, req_cnf=req_cnf,
-			code_challenge=code_challenge, code_challenge_method=code_challenge_method)
+			code_challenge=code_challenge, code_challenge_method=code_challenge_method, request=request_param)
 		response_mode_char = '?' if 'query' == response_mode else '#'
 		response_types = response_type.split()
 		scopes = scope.split()
-		cnf = parse_confirmation_req(req_cnf)
+		request_key = request_obj.get('key')
+		cnf = parse_confirmation_req(req_cnf) or (dict(jwk=request_key) if request_key else None)
 
 		if not all((client_id, redirect_uri, response_type)):
 			return self.answer_json({"error": "invalid_request"}, code=400)
@@ -541,7 +559,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				self.log_message("consent %s <%s> -> %s", session_user['username'], session_user['webid'], redirect_uri)
 
 		authed_on = just_authed_on or (session_user['authed_on'] if session_user else None)
-		max_age = qparam(params, 'max_age')
+		max_age = get_param('max_age')
 		max_age = min(int(max_age) if max_age is not None else MAX_SESSION_LIFETIME, MAX_SESSION_LIFETIME)
 		need_to_login = (not session_user) or (not session_user['enabled']) or (authed_on < now - max_age) or ('login' == prompt)
 
