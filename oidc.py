@@ -635,7 +635,8 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		content_type = mimetypes.guess_type(path)[0] or 'application/octet-stream'
 		try:
 			with open(path, 'rb') as f:
-				return self.send_answer(f.read(), content_type=content_type, cache=True)
+				other_headers = [('X-Frame-Options', 'deny'), ('Content-Security-Policy', "frame-ancestors 'none';")]
+				return self.send_answer(f.read(), content_type=content_type, cache=True, other_headers=other_headers)
 		except:
 			pass
 		return self.send_answer('not found', code=404)
