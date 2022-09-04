@@ -1,4 +1,4 @@
-#! /usr/bin/env python --
+#! /usr/bin/env python3 --
 
 #   Copyright 2019 Michael Thornburgh
 #
@@ -14,7 +14,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+import sys
+if sys.version_info.major < 3: raise SystemExit('error: Python 3 required')
+
+from functools import reduce
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import argparse
 import base64
 import binascii
@@ -28,27 +32,37 @@ import re
 import rsa
 import socket
 import sqlite3
-import sys
-import thread
+import _thread
 import time
 import traceback
-import urllib
-import urllib2
-import urlparse
+import urllib.parse
+import urllib.request
 import uuid
 
 
+def as_bytes(s):
+	if type(s) == str:
+		s = bytes(s, 'utf-8')
+	return s
+
+def as_str(s):
+	if type(s) == bytes:
+		s = str(s, 'utf-8')
+	return s
+
 def b64u_encode(s):
-	return base64.urlsafe_b64encode(s).rstrip('=')
+	return str(base64.urlsafe_b64encode(as_bytes(s)), 'utf-8').rstrip('=')
 
 def b64_padding(s):
 	padding = '=' * (4 - (len(s) % 4))
 	return '' if len(padding) == 4 else padding
 	
 def b64_decode(s):
+	s = as_str(s)
 	return base64.b64decode(s + b64_padding(s))
 
 def b64u_decode(s):
+	s = as_str(s)
 	return base64.urlsafe_b64decode(s + b64_padding(s))
 
 parser = argparse.ArgumentParser()
@@ -85,7 +99,7 @@ MAX_SESSION_LIFETIME = 14 * 86400 # you need to log in at least once every two w
 CLIENT_LIFETIME      = 30 * 86400
 KEYID_LEN            = 9
 
-urlPathPrefix = urlparse.urlparse(args.url).path
+urlPathPrefix = urllib.parse.urlparse(args.url).path
 if urlPathPrefix[-1] != '/':
 	raise ValueError("url must end in a slash")
 
@@ -93,7 +107,7 @@ publicKey_data = open(PUBLIC_KEYFILE).read()
 publicKey = rsa.PublicKey.load_pkcs1_openssl_pem(publicKey_data)
 privateKey = rsa.PrivateKey.load_pkcs1(open(PRIVATE_KEYFILE).read())
 
-key_id = b64u_encode(hashlib.sha512(publicKey_data).digest()[:KEYID_LEN])
+key_id = b64u_encode(hashlib.sha512(as_bytes(publicKey_data)).digest()[:KEYID_LEN])
 
 db = sqlite3.connect(DBFILE)
 db.row_factory = sqlite3.Row
@@ -113,12 +127,12 @@ def cleanup_thread():
 			cleanup_db.commit()
 		except sqlite3.OperationalError:
 			cleanup_db.rollback()
-			print traceback.format_exc()
-			print "will retry in", args.cleanup_interval
+			print(traceback.format_exc())
+			print("will retry in", args.cleanup_interval)
 		time.sleep(args.cleanup_interval)
 
 def start_cleanup_thread():
-	thread.start_new_thread(cleanup_thread, ())
+	_thread.start_new_thread(cleanup_thread, ())
 
 def qparam(params, key):
 	return params.get(key, [None])[0]
@@ -127,9 +141,9 @@ def urlencode(query):
 	# urllib.urlencode will encode a None value as a string None.
 	# this will suppress None and empty values.
 	rv = []
-	for k, v in query.iteritems():
+	for k, v in query.items():
 		if v:
-			rv.append('%s=%s' % (urllib.quote_plus(str(k)), urllib.quote(str(v), '')))
+			rv.append('%s=%s' % (urllib.parse.quote_plus(str(k)), urllib.parse.quote(str(v), '')))
 	return '&'.join(rv)
 
 def compact_json(obj):
@@ -139,7 +153,7 @@ def make_jwt(obj):
 	header = compact_json({"alg":"RS256","typ":"JWT","kid":key_id})
 	payload = compact_json(obj)
 	data = b64u_encode(header) + "." + b64u_encode(payload)
-	signature = rsa.sign(data, privateKey, "SHA-256")
+	signature = rsa.sign(as_bytes(data), privateKey, "SHA-256")
 	return data + "." + b64u_encode(signature)
 
 def check_password(password, pwhash):
@@ -147,12 +161,13 @@ def check_password(password, pwhash):
 	try:
 		hashparts = pwhash.split('$')
 		hashparams = re.match(r'pbkdf2\((\d+),(\d+),(\w+)\)', hashparts[0]).groups()
-		return binascii.hexlify(hashlib.pbkdf2_hmac(hashparams[2], password, hashparts[1], int(hashparams[0]), int(hashparams[1]))) == hashparts[2]
+		return as_str(binascii.hexlify(hashlib.pbkdf2_hmac(hashparams[2], as_bytes(password), as_bytes(hashparts[1]), int(hashparams[0]), int(hashparams[1])))) == hashparts[2]
 	except:
+		print(traceback.format_exc())
 		return False
 
 def b64u_hmacsha512(key, msg):
-	return b64u_encode(hmac.new(bytes(key), bytes(msg), digestmod=hashlib.sha512).digest())
+	return b64u_encode(hmac.new(as_bytes(key), as_bytes(msg), digestmod=hashlib.sha512).digest())
 
 def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None, code=None, lifetime = args.token_lifetime, redirect_uri=None, cnf=None):
 	now = time.time()
@@ -164,9 +179,9 @@ def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None
 		"iss": args.url,
 		"sub": webid,
 		"aud": aud,
-		"exp": long(now + lifetime),
-		"iat": long(now),
-		"auth_time": long(auth_time),
+		"exp": int(now + lifetime),
+		"iat": int(now),
+		"auth_time": int(auth_time),
 		"acr": "0",
 		"azp": client_id,
 		"jti": str(uuid.uuid4())
@@ -174,9 +189,9 @@ def make_id_token(webid, client_id, auth_time, nonce = None, access_token = None
 	if nonce:
 		token['nonce'] = nonce
 	if access_token:
-		token['at_hash'] = b64u_encode(hashlib.sha256(access_token).digest()[:16])
+		token['at_hash'] = b64u_encode(hashlib.sha256(as_bytes(access_token)).digest()[:16])
 	if code:
-		token['c_hash'] = b64u_encode(hashlib.sha256(code).digest()[:16])
+		token['c_hash'] = b64u_encode(hashlib.sha256(as_bytes(code)).digest()[:16])
 	if cnf:
 		token['cnf'] = cnf
 	return make_jwt(token)
@@ -197,13 +212,13 @@ def response_type_flag(s):
 	return 0
 
 def redirect_uri_hash(uri):
-	return hashlib.sha512(uri).digest()[:21]
+	return hashlib.sha512(as_bytes(uri)).digest()[:21]
 
 def make_client_id(response_types, redirect_uris):
 	header = bytearray(3)
 	header[0] = 0x10 # version 1
 	header[1] = reduce(lambda x, y: x | response_type_flag(y), response_types, 0)
-	redirect_uri_hashes = ''.join(map(redirect_uri_hash, redirect_uris))
+	redirect_uri_hashes = b''.join(map(redirect_uri_hash, redirect_uris))
 	salt = os.urandom(12)
 	return '.'.join(map(b64u_encode, [header, redirect_uri_hashes, salt]))
 
@@ -218,7 +233,7 @@ def parse_client_id(client_id):
 
 def make_client_secret(client_id):
 	row = db.cursor().execute("SELECT * FROM config WHERE key = 'client_secret_secret'").fetchone()
-	return b64u_hmacsha512(b64u_decode(bytes(row['value'])), client_id)
+	return b64u_hmacsha512(b64u_decode(row['value']), client_id)
 
 def make_formkey():
 	rv = random_token()
@@ -240,7 +255,7 @@ def check_consent(user_id, session_id, redirect_uri):
 	return c.fetchone()
 
 def get_origin(uri):
-	urlparts = urlparse.urlparse(uri)
+	urlparts = urllib.parse.urlparse(uri)
 	scheme = urlparts.scheme.lower()
 	port = urlparts.port or { 'http':80, 'https':443 }.get(scheme, None)
 	return ('%s://%s:%s' % (scheme, urlparts.hostname or '', port)).lower()
@@ -249,7 +264,7 @@ def check_redirect_uris(uris, insecureAllowed):
 	if insecureAllowed:
 		return True
 	for uri in uris:
-		urlparts = urlparse.urlparse(uri)
+		urlparts = urllib.parse.urlparse(uri)
 		if ('http' == urlparts.scheme.lower()) and ('localhost' != (urlparts.hostname or '').lower()):
 			return False
 	return True
@@ -284,7 +299,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	COOKIE     = 'oidc_session'
 
 	def real_client_address(self):
-		forwarded_for = self.headers.getheader('x-forwarded-for')
+		forwarded_for = self.headers.get('x-forwarded-for')
 		# return "%s %s" % (self.client_address[0], forwarded_for or '-')
 		return forwarded_for or self.client_address[0]
 
@@ -296,7 +311,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		sys.stdout.flush()
 
 	def get_cookie(self, name = COOKIE):
-			header = self.headers.getheader('Cookie')
+			header = self.headers.get('Cookie')
 			if header:
 				cookies = re.split(r'\s*;\s*', header)
 				for each in cookies:
@@ -306,7 +321,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 
 	def get_auth_header(self, header_type):
 		try:
-			header = self.headers.getheader('Authorization')
+			header = self.headers.get('Authorization')
 			if header:
 				authtype, val = re.split(r'\s+', header, 1)
 				if authtype.lower() == header_type.lower():
@@ -317,7 +332,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 	def get_basic_auth(self):
 		auth = self.get_auth_header('Basic')
 		if auth:
-			parts = b64_decode(auth).split(':', 1)
+			parts = as_str(b64_decode(auth)).split(':', 1)
 			parts.append(None)
 			return tuple(parts[:2])
 		return (None, None)
@@ -326,7 +341,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		return self.get_auth_header('Bearer')
 
 	def is_cross_origin(self):
-		origin_header = self.headers.getheader('Origin')
+		origin_header = self.headers.get('Origin')
 		if origin_header in (None, 'null'):
 			return False
 		origins = re.split(r'\s*;\s*', origin_header)
@@ -338,11 +353,11 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		self.send_header('Content-length', len(body))
 		self.send_header('Cache-control', 'max-age=300' if cache else 'no-cache, no-store')
 		if cors:
-			self.send_header('Access-Control-Allow-Origin', self.headers.getheader('Origin') or '*')
+			self.send_header('Access-Control-Allow-Origin', self.headers.get('Origin') or '*')
 		for h, v in other_headers:
 			self.send_header(h, v)
 		self.end_headers()
-		self.wfile.write(body)
+		self.wfile.write(as_bytes(body))
 		db.commit()
 
 	def answer_json(self, obj, content_type='application/json', **kv):
@@ -394,7 +409,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		return self.send_answer('no cookie\n')
 
 	def answer_register(self, requestBody):
-		now = long(time.time())
+		now = int(time.time())
 		body = json.loads(requestBody)
 		response_types = body.get('response_types', ['code'])
 		redirect_uris = body['redirect_uris']
@@ -414,7 +429,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		}, code=201, cors=True)
 
 	def answer_token(self, requestBody):
-		params = urlparse.parse_qs(requestBody)
+		params = urllib.parse.parse_qs(requestBody)
 		client_id, client_secret = self.get_basic_auth()
 		client_id = qparam(params, 'client_id') or client_id
 		client_secret = qparam(params, 'client_secret') or client_secret
@@ -439,13 +454,13 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				or (client_secret != make_client_secret(client_id)):
 			return self.answer_json({"error": "invalid_grant"}, code=400, cors=True)
 		if row['challenge'] and \
-				(b64u_encode(hashlib.sha256(bytes(code_verifier)).digest()) != row['challenge']):
-			print row['challenge'], "!=", b64u_encode(hashlib.sha256(bytes(code_verifier)).digest()), code_verifier
+				(b64u_encode(hashlib.sha256(as_bytes(code_verifier)).digest()) != row['challenge']):
+			print(row['challenge'], "!=", b64u_encode(hashlib.sha256(as_bytes(code_verifier)).digest()), code_verifier)
 			return self.answer_json({"error": "invalid_grant", "description": "PKCE verification failed"}, code=400, cors=True)
 
 		c.execute("DELETE FROM code WHERE code = ?", (code, ))
 
-		now = long(time.time())
+		now = int(time.time())
 		self.answer_json({
 			"access_token": row['access_token'],
 			"token_type": "Bearer",
@@ -454,9 +469,9 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		}, cors=True)
 
 	def answer_authorize(self, query, requestBody):
-		now = long(time.time())
+		now = int(time.time())
 		params = query.copy()
-		params.update(urlparse.parse_qs(requestBody))
+		params.update(urllib.parse.parse_qs(requestBody))
 		cookie = self.get_cookie()
 		c = db.cursor()
 
@@ -487,7 +502,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		cnf = dict(jwk=request_key) if request_key else parse_confirmation_req(req_cnf)
 
 		if not all((client_id, redirect_uri, response_type)):
-			return self.answer_json({"error": "invalid_request"}, code=400)
+			return self.answer_json({"error": "invalid_request", "description": "missing parameters"}, code=400)
 
 		def send_redirect(location, cookie=None, query=None, mode=response_mode_char):
 			if query:
@@ -533,7 +548,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 				login_user = c.fetchone()
 				if (not login_user) or (not login_user['enabled']) or not check_password(form_password, login_user['pwhash']):
 					redirect_query['form_key'] = make_formkey()
-					return send_redirect(urlparse.urljoin(urlPathPrefix, args.login_url), query=redirect_query, mode='#')
+					return send_redirect(urllib.parse.urljoin(urlPathPrefix, args.login_url), query=redirect_query, mode='#')
 				# at this point user just logged in with password
 				self.log_message("authenticated %s <%s>", login_user['username'], login_user['webid'])
 				if (not session_user) or (session_user['user'] != login_user['id']):
@@ -541,7 +556,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 						c.execute("DELETE FROM session WHERE cookie = ?", (cookie, ))
 					cookie = random_token()
 					c.execute("INSERT INTO session (cookie, user, host, user_agent) VALUES (?, ?, ?, ?)",
-						(cookie, login_user['id'], self.real_client_address(), self.headers.getheader('user-agent')))
+						(cookie, login_user['id'], self.real_client_address(), self.headers.get('user-agent')))
 					c.execute("SELECT session.id as session_id, * FROM session JOIN user ON session.user = user.id WHERE session.id = ?", (c.lastrowid, ))
 					session_user = c.fetchone()
 					self.log_message("session created %s <%s>", session_user['username'], session_user['webid'])
@@ -575,12 +590,12 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 
 		if need_to_login:
 			redirect_query['form_key'] = make_formkey()
-			return send_redirect(urlparse.urljoin(urlPathPrefix, args.login_url), query=redirect_query, mode='#')
+			return send_redirect(urllib.parse.urljoin(urlPathPrefix, args.login_url), query=redirect_query, mode='#')
 
 		if need_consent:
 			redirect_query['form_key'] = make_formkey()
 			redirect_query['identity'] = session_user['webid'] or session_user['username']
-			return send_redirect(urlparse.urljoin(urlPathPrefix, args.consent_url), query=redirect_query, mode='#', cookie=cookie)
+			return send_redirect(urllib.parse.urljoin(urlPathPrefix, args.consent_url), query=redirect_query, mode='#', cookie=cookie)
 
 		# if we get this far, we're logged in with a cookie and have given consent.
 		# create code, token, id_token, redirect
@@ -608,7 +623,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		return send_redirect(redirect_uri, query=response_query, cookie=cookie)
 
 	def answer_userinfo(self, requestBody):
-		params = urlparse.parse_qs(requestBody)
+		params = urllib.parse.parse_qs(requestBody)
 		access_token = qparam(params, 'access_token') or self.get_bearer_auth()
 		if access_token:
 			c = db.cursor()
@@ -645,11 +660,11 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 		try:
 			db.rollback()
 
-			urlParts = urlparse.urlparse(self.path)
+			urlParts = urllib.parse.urlparse(self.path)
 			path = urlParts.path
 			if path.startswith(urlPathPrefix):
 				path = path[len(urlPathPrefix):]
-			query = urlparse.parse_qs(urlParts.query or '')
+			query = urllib.parse.parse_qs(urlParts.query or '')
 
 			if   path == self.CONFIG:
 				return self.answer_openid_config()
@@ -675,14 +690,14 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 
 		except:
 			db.rollback()
-			print traceback.format_exc()
+			print(traceback.format_exc())
 			self.send_response(500)
 			self.send_header('Content-length', '0')
 			self.end_headers()
 
 	def do_POST(self):
 		content_length = int(self.headers.get('content-length', 0))
-		requestBody = self.rfile.read(content_length) if content_length else ''
+		requestBody = as_str(self.rfile.read(content_length)) if content_length else ''
 		return self.process_request(requestBody)
 
 	def do_GET(self):
@@ -694,7 +709,7 @@ class OIDCRequestHandler(BaseHTTPRequestHandler):
 			self.TOKEN: 'POST, OPTIONS'
 		}
 
-		urlParts = urlparse.urlparse(self.path)
+		urlParts = urllib.parse.urlparse(self.path)
 		path = urlParts.path
 		if path.startswith(urlPathPrefix):
 			path = path[len(urlPathPrefix):]

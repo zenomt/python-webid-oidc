@@ -1,4 +1,4 @@
-#! /usr/bin/env python --
+#! /usr/bin/env python3 --
 
 #   Copyright 2019 Michael Thornburgh
 #
@@ -20,7 +20,10 @@ import getpass
 import hashlib
 import os
 import sqlite3
+import sys
 import time
+
+if sys.version_info.major < 3: raise SystemExit('error: Python 3 required')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--user', metavar="USERNAME", help="user name to create or update")
@@ -52,8 +55,8 @@ def get_salt():
 def hash_password(password):
 	salt = get_salt()
 	pwlen = 64
-	pwhash = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', password, salt, args.iterations, pwlen))
-	return 'pbkdf2(%d,%d,sha512)$%s$%s' % (args.iterations, pwlen, salt, pwhash)
+	pwhash = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', bytes(password, 'utf-8'), salt, args.iterations, pwlen))
+	return 'pbkdf2(%d,%d,sha512)$%s$%s' % (args.iterations, pwlen, str(salt, 'utf-8'), str(pwhash, 'utf-8'))
 
 def get_password():
 	pw1 = getpass.getpass('Password: ')
@@ -63,7 +66,7 @@ def get_password():
 	return pw1
 
 def get_val_or_None(prompt):
-	rv = raw_input(prompt)
+	rv = input(prompt)
 	return rv if rv else None
 
 os.stat(args.dbfile)
@@ -73,17 +76,17 @@ db.executescript("PRAGMA foreign_keys = on;")
 
 def prompt_sure():
 	if not args.yes:
-		if raw_input('are you sure? ').lower() not in ['y', 'yes']:
+		if input('are you sure? ').lower() not in ['y', 'yes']:
 			raise SystemExit("abort")
 
 def logout_user():
-	print "logging out %s" % (args.user, )
+	print("logging out %s" % (args.user, ))
 	prompt_sure()
 	c = db.cursor()
 	c.execute("DELETE FROM session WHERE user = (SELECT id FROM user WHERE username = ?)", (args.user, ))
 
 def delete_user():
-	print "deleting %s" % (args.user, )
+	print("deleting %s" % (args.user, ))
 	prompt_sure()
 	c = db.cursor()
 	c.execute("DELETE FROM user WHERE username = ?", (args.user, ))
@@ -136,18 +139,18 @@ def update_user():
 	rows_updated += conditional_update(email, "email")
 	rows_updated += conditional_update(webid, "webid")
 	if 0 == rows_updated:
-		print "no updates for %s" % (args.user, )
+		print("no updates for %s" % (args.user, ))
 
 def print_users(users):
 	rows = [('username', '', 'webid', 'email', 's', 't', 'c')]
 	maxes = (8, 0, 16, 5, 1, 1, 1)
 	for row in users:
-		v = (row['username'], ('' if row['enabled'] else 'D'), row['webid'] or '', row['email'] or '', `row['num_sessions']`, `row['num_tokens']`, `row['num_codes']`)
+		v = (row['username'], ('' if row['enabled'] else 'D'), row['webid'] or '', row['email'] or '', repr(row['num_sessions']), repr(row['num_tokens']), repr(row['num_codes']))
 		maxes = map(max, maxes, map(len, v))
 		rows.append(v)
 	fmt = '%%-%ds  %%-%ds %%-%ds  %%-%ds  %%%ds %%%ds %%%ds' % tuple(maxes)
 	for row in rows:
-		print fmt % row
+		print(fmt % row)
 
 def list_users():
 	c = db.cursor()

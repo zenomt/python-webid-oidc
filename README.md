@@ -1,7 +1,7 @@
 Simple WebID-OIDC Provider in Python
 ====================================
 This is a simple [WebID-OIDC][webid-oidc] (WebID OpenID Connect) Provider
-written in Python 2.7, intended for small deployments of one-to-a-few users
+written in Python 3, intended for small deployments of one-to-a-few users
 who implicitly trust the administrator.  It is written to be audit-able,
 understandable, easy to modify, and easy to deploy (with minimal dependencies)
 as a stand-alone component for use with [Web Access Control][wac] and
@@ -24,7 +24,7 @@ The `oidc.py` server component depends on the `rsa` module. Install it with
 
 	$ pip install rsa
 
-All other components depend only on standard Python 2.7 library modules.
+All other components depend only on standard Python 3 library modules.
 
 `oidc.py`
 ---------
@@ -33,7 +33,7 @@ HTTP requests forwarded by the HTTPS reverse proxy. Its one required parameter
 is its own OIDC Issuer URL.  For example, after [setting up](#setup), if your
 issuer URL is `https://example.com/oidc/`, run the server with
 
-	$ python oidc.py https://example.com/oidc/
+	$ python3 oidc.py https://example.com/oidc/
 
 The supplied issuer URL must end with a slash.
 
@@ -129,7 +129,7 @@ This is the user management tool.
 
 Add a user named `username` (after the database is initialized above):
 
-	$ python wopasswd.py -u username -c
+	$ python3 wopasswd.py -u username -c
 	webid: https://username.example.com/card.ttl#me
 	email: username@example.com
 	Password: 
@@ -137,7 +137,7 @@ Add a user named `username` (after the database is initialized above):
 
 To change `username`'s password by prompting for it:
 
-	$ python wopasswd.py -u username -p
+	$ python3 wopasswd.py -u username -p
 	Password: 
 	Re-enter password: 
 
@@ -146,22 +146,22 @@ exposing it to the administrator.
 
 To disable `baduser`:
 
-	$ python wopasswd.py -u baduser -d
+	$ python3 wopasswd.py -u baduser -d
 
 With no parameters specifying creating or modifying a user, `wopasswd.py`
 will display a summary of configured users, whether each user is disabled,
 the number of active sessions and tokens, and number of unredeemed authorization
 codes:
 
-	$ python wopasswd.py
+	$ python3 wopasswd.py
 	username    webid                                     email                 s t c
 	baduser   D https://baduser.example.com/card.ttl#me   baduser@example.com   0 0 0
 	username    https://username.example.com/card.ttl#me  username@example.com  2 8 0
 
 To re-enable `baduser`:
 
-	$ python wopasswd.py -u baduser -e
-	$ python wopasswd.py
+	$ python3 wopasswd.py -u baduser -e
+	$ python3 wopasswd.py
 	username   webid                                     email                 s t c
 	baduser    https://baduser.example.com/card.ttl#me   baduser@example.com   0 0 0
 	username   https://username.example.com/card.ttl#me  username@example.com  2 8 0
@@ -196,7 +196,7 @@ For example, the user "`username`" chooses plain password "`password`" (note:
 this is a bad password to choose). The user doesn't want to share this plain
 password with the administrator. The user runs `pwhash.py` on her own terminal:
 
-	$ python pwhash.py
+	$ python3 pwhash.py
 	Password: 
 	Re-enter password: 
 	pbkdf2(100000,64,sha512)$5bc55a1bb523402d5cf85392876d0a475f9cfa757450002fc4bfbfef38382fcd481da4050f8bce16212fa1e7dd435df14276cea62be0ac101b43730e6227dba9$690a97bd149caa912621f7618097190418175c09eb29506fdd6f318dbe7d8de6a3e8cfc8928e0eaf6abc241558b195fcfcf4e8c027df1fd09e01c85825253fb2
@@ -205,7 +205,7 @@ The user then sends the full hashed password string `pbkdf2(iter,len,alg)$salt$h
 to the administrator. The administrator can then set this pre-hashed password
 for the user (assuming account `username` already exists in this example):
 
-	$ python wopasswd.py -u username --pwhash 'pbkdf2(100000,64,sha512)$5bc55a1bb523402d5cf85392876d0a475f9cfa757450002fc4bfbfef38382fcd481da4050f8bce16212fa1e7dd435df14276cea62be0ac101b43730e6227dba9$690a97bd149caa912621f7618097190418175c09eb29506fdd6f318dbe7d8de6a3e8cfc8928e0eaf6abc241558b195fcfcf4e8c027df1fd09e01c85825253fb2'
+	$ python3 wopasswd.py -u username --pwhash 'pbkdf2(100000,64,sha512)$5bc55a1bb523402d5cf85392876d0a475f9cfa757450002fc4bfbfef38382fcd481da4050f8bce16212fa1e7dd435df14276cea62be0ac101b43730e6227dba9$690a97bd149caa912621f7618097190418175c09eb29506fdd6f318dbe7d8de6a3e8cfc8928e0eaf6abc241558b195fcfcf4e8c027df1fd09e01c85825253fb2'
 
 (Note the use of single-quotes `'` in this example, since the hashed password
 includes the `$` character which has special meaning to most Unix shells).
@@ -215,7 +215,7 @@ includes the `$` character which has special meaning to most Unix shells).
 This tool displays information of administrative interest about current
 sessions for a specific user.
 
-	$ python wosession.py username
+	$ python3 wosession.py username
 	login           last-auth       updated         host  
 	04/07 12:55:14  04/07 14:33:29  04/07 19:24:45  2001:db8::2
 	04/07 19:10:47  @ login         04/07 19:10:49  198.51.100.5
@@ -223,7 +223,7 @@ sessions for a specific user.
 To include information about id tokens, access tokens, and unredeemed
 authorization codes, use the `-t` option:
 
-	$ python wosession.py username -t
+	$ python3 wosession.py username -t
 	login           last-auth       updated         host  
 	04/07 12:55:14  04/07 14:33:29  04/07 19:24:45  2001:db8::2
 	        issued          remain  i a  uri
